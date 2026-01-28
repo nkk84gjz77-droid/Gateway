@@ -1,91 +1,84 @@
-import streamlit as st
-from efi_sdk import EfiPay
-import qrcode
-from io import BytesIO
-from PIL import Image
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nosso Gateway Privado</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { background: #f4f7f6; font-family: 'Inter', sans-serif; }
+        .glass { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
+        .gradient-bg { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
 
-# --- CONFIGURAÇÃO DA INTERFACE ---
-st.set_page_config(page_title="Nosso Gateway Privado", layout="wide")
-
-st.title("🛡️ Gateway Privado: Recebimentos e Transferências")
-
-# --- BARRA LATERAL: CONFIGURAÇÕES ---
-with st.sidebar:
-    st.header("Configurações de Acesso")
-    client_id = st.text_input("Client ID", type="password")
-    client_secret = st.text_input("Client Secret", type="password")
-    ambiente = st.selectbox("Ambiente", ["Produção", "Homologação (Teste)"])
-    cert_path = st.text_input("Caminho do Certificado (.pem)", value="certificado.pem")
-
-# --- LÓGICA DA API ---
-def get_efi_client():
-    options = {
-        'client_id': client_id,
-        'client_secret': client_secret,
-        'sandbox': True if ambiente == "Homologação (Teste)" else False,
-        'certificate': cert_path
-    }
-    return EfiPay(options)
-
-# --- ABAS DA INTERFACE ---
-tab1, tab2, tab3 = st.tabs(["📥 Gerar PIX", "📤 Enviar PIX (Payout)", "📋 Histórico"])
-
-with tab1:
-    st.subheader("Receber Dinheiro")
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        valor = st.number_input("Valor (R$)", min_value=0.01, step=0.01)
-        chave_pix = st.text_input("Sua Chave PIX cadastrada na Efí")
-        memo = st.text_input("Descrição do Pagamento", value="Transferência Interna")
+    <div class="max-w-4xl w-full glass rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row">
         
-        if st.button("Gerar QR Code"):
-            if client_id and client_secret:
-                try:
-                    efi = get_efi_client()
-                    body = {
-                        'calendario': {'expiracao': 3600},
-                        'valor': {'original': f"{valor:.2f}"},
-                        'chave': chave_pix,
-                        'solicitacaoPagador': memo
-                    }
-                    # Criando a cobrança
-                    response = efi.pix_create_immediate_charge(body=body)
-                    loc_id = response['loc']['id']
-                    
-                    # Gerando o QR Code dinâmico
-                    params = {'id': loc_id}
-                    qr_response = efi.pix_generate_qrcode(params=params)
-                    
-                    st.session_state['qr_code'] = qr_response['qrcode_res']
-                    st.session_state['imagem_qr'] = qr_response['imagemQrcode']
-                    st.success("Cobrança criada!")
-                except Exception as e:
-                    st.error(f"Erro no Banco: {e}")
-            else:
-                st.warning("Insira as credenciais na lateral.")
+        <div class="md:w-64 gradient-bg p-8 text-white">
+            <div class="flex items-center gap-3 mb-10">
+                <div class="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center">
+                    <i class="fas fa-shield-alt text-xl"></i>
+                </div>
+                <h1 class="text-xl font-bold tracking-tight">GATEWAY</h1>
+            </div>
+            
+            <nav class="space-y-4">
+                <a href="#" class="flex items-center gap-3 p-3 bg-white/10 rounded-xl text-blue-400 border border-white/10">
+                    <i class="fas fa-qrcode"></i> Gerar Pix
+                </a>
+                <a href="#" class="flex items-center gap-3 p-3 text-gray-400 hover:bg-white/5 rounded-xl transition">
+                    <i class="fas fa-paper-plane"></i> Transferir
+                </a>
+                <a href="#" class="flex items-center gap-3 p-3 text-gray-400 hover:bg-white/5 rounded-xl transition">
+                    <i class="fas fa-history"></i> Histórico
+                </a>
+            </nav>
+        </div>
 
-    with col2:
-        if 'imagem_qr' in st.session_state:
-            st.image(st.session_state['imagem_qr'], caption="Aponte a câmera do banco")
-            st.code(st.session_state['qr_code'], language="text")
+        <div class="flex-1 p-8 md:p-12">
+            <div class="flex justify-between items-center mb-8">
+                <h2 class="text-2xl font-bold text-gray-800">Receber Pagamento</h2>
+                <span class="text-xs bg-green-100 text-green-600 px-3 py-1 rounded-full font-semibold uppercase">API Ativa</span>
+            </div>
 
-with tab2:
-    st.subheader("Transferir Dinheiro para Terceiros")
-    st.warning("Cuidado: Esta operação retira dinheiro da sua conta real instantaneamente.")
-    
-    dest_chave = st.text_input("Chave PIX de Destino")
-    dest_valor = st.number_input("Valor a enviar (R$)", min_value=0.01, step=0.01, key="send_val")
-    
-    if st.button("Efetuar Pagamento"):
-        # Lógica de Payout (Exige escopo 'payout.write' na API)
-        st.info("Iniciando transferência... Verifique os logs do servidor.")
-        # O código de envio real da Efí seria:
-        # efi.pix_send_immediate_payment(body={'valor': str(dest_valor), 'chave': dest_chave})
-        st.success(f"Comando enviado: R$ {dest_valor} -> {dest_chave}")
+            <div class="grid md:grid-cols-2 gap-10">
+                <div class="space-y-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-500 mb-2">Valor do Recebimento (R$)</label>
+                        <input type="number" placeholder="150.00" class="w-full p-4 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none transition">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-500 mb-2">Descrição (Opcional)</label>
+                        <input type="text" placeholder="Venda de produto" class="w-full p-4 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none transition">
+                    </div>
+                    <button class="w-full py-4 gradient-bg text-white rounded-2xl font-bold shadow-lg shadow-blue-900/20 hover:scale-[1.02] transition-transform">
+                        Gerar QR Code Dinâmico
+                    </button>
+                </div>
 
-with tab3:
-    st.subheader("Movimentações Recentes")
-    # Aqui você poderia listar as cobranças criadas consultando o banco
-    st.write("Conecte a API para carregar o histórico em tempo real.")
+                <div class="flex flex-col items-center justify-center border-2 border-dashed border-gray-200 rounded-3xl p-6 bg-white">
+                    <div class="w-48 h-48 bg-gray-100 rounded-2xl mb-4 flex items-center justify-center border border-gray-200 shadow-inner">
+                        <i class="fas fa-qrcode text-6xl text-gray-300"></i>
+                    </div>
+                    <p class="text-sm text-gray-400 text-center">Aguardando geração do código...</p>
+                </div>
+            </div>
+
+            <div class="mt-12 pt-8 border-t border-gray-100 grid grid-cols-2 gap-4">
+                <div class="flex items-center gap-3">
+                    <i class="fas fa-lock text-blue-500"></i>
+                    <span class="text-xs text-gray-500">Criptografia de 256 bits ativa</span>
+                </div>
+                <div class="flex items-center gap-3">
+                    <i class="fas fa-check-circle text-green-500"></i>
+                    <span class="text-xs text-gray-500">Conformidade PIX Banco Central</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>
 
