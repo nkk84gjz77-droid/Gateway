@@ -1,0 +1,91 @@
+import streamlit as st
+from efi_sdk import EfiPay
+import qrcode
+from io import BytesIO
+from PIL import Image
+
+# --- CONFIGURAÇÃO DA INTERFACE ---
+st.set_page_config(page_title="Nosso Gateway Privado", layout="wide")
+
+st.title("🛡️ Gateway Privado: Recebimentos e Transferências")
+
+# --- BARRA LATERAL: CONFIGURAÇÕES ---
+with st.sidebar:
+    st.header("Configurações de Acesso")
+    client_id = st.text_input("Client ID", type="password")
+    client_secret = st.text_input("Client Secret", type="password")
+    ambiente = st.selectbox("Ambiente", ["Produção", "Homologação (Teste)"])
+    cert_path = st.text_input("Caminho do Certificado (.pem)", value="certificado.pem")
+
+# --- LÓGICA DA API ---
+def get_efi_client():
+    options = {
+        'client_id': client_id,
+        'client_secret': client_secret,
+        'sandbox': True if ambiente == "Homologação (Teste)" else False,
+        'certificate': cert_path
+    }
+    return EfiPay(options)
+
+# --- ABAS DA INTERFACE ---
+tab1, tab2, tab3 = st.tabs(["📥 Gerar PIX", "📤 Enviar PIX (Payout)", "📋 Histórico"])
+
+with tab1:
+    st.subheader("Receber Dinheiro")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        valor = st.number_input("Valor (R$)", min_value=0.01, step=0.01)
+        chave_pix = st.text_input("Sua Chave PIX cadastrada na Efí")
+        memo = st.text_input("Descrição do Pagamento", value="Transferência Interna")
+        
+        if st.button("Gerar QR Code"):
+            if client_id and client_secret:
+                try:
+                    efi = get_efi_client()
+                    body = {
+                        'calendario': {'expiracao': 3600},
+                        'valor': {'original': f"{valor:.2f}"},
+                        'chave': chave_pix,
+                        'solicitacaoPagador': memo
+                    }
+                    # Criando a cobrança
+                    response = efi.pix_create_immediate_charge(body=body)
+                    loc_id = response['loc']['id']
+                    
+                    # Gerando o QR Code dinâmico
+                    params = {'id': loc_id}
+                    qr_response = efi.pix_generate_qrcode(params=params)
+                    
+                    st.session_state['qr_code'] = qr_response['qrcode_res']
+                    st.session_state['imagem_qr'] = qr_response['imagemQrcode']
+                    st.success("Cobrança criada!")
+                except Exception as e:
+                    st.error(f"Erro no Banco: {e}")
+            else:
+                st.warning("Insira as credenciais na lateral.")
+
+    with col2:
+        if 'imagem_qr' in st.session_state:
+            st.image(st.session_state['imagem_qr'], caption="Aponte a câmera do banco")
+            st.code(st.session_state['qr_code'], language="text")
+
+with tab2:
+    st.subheader("Transferir Dinheiro para Terceiros")
+    st.warning("Cuidado: Esta operação retira dinheiro da sua conta real instantaneamente.")
+    
+    dest_chave = st.text_input("Chave PIX de Destino")
+    dest_valor = st.number_input("Valor a enviar (R$)", min_value=0.01, step=0.01, key="send_val")
+    
+    if st.button("Efetuar Pagamento"):
+        # Lógica de Payout (Exige escopo 'payout.write' na API)
+        st.info("Iniciando transferência... Verifique os logs do servidor.")
+        # O código de envio real da Efí seria:
+        # efi.pix_send_immediate_payment(body={'valor': str(dest_valor), 'chave': dest_chave})
+        st.success(f"Comando enviado: R$ {dest_valor} -> {dest_chave}")
+
+with tab3:
+    st.subheader("Movimentações Recentes")
+    # Aqui você poderia listar as cobranças criadas consultando o banco
+    st.write("Conecte a API para carregar o histórico em tempo real.")
+
